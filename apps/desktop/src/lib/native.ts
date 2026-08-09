@@ -70,36 +70,76 @@ export async function syncNativePets(
       petPackage,
       state: pet,
     };
-    const imageDataUrl = await rasterizePet(petPackage);
+    const layers = await rasterizePetLayers(petPackage);
     await invoke("upsert_pet_window", {
       petId: pet.petId,
       x: pet.position.x,
       y: pet.position.y,
       scale: pet.scale,
       payload,
-      imageDataUrl,
+      packageRevision: petPackage.createdAt,
+      layers,
+      animations: petPackage.animations,
     });
   }
 }
 
-const rasterCache = new Map<string, string>();
+interface NativePetLayer {
+  id: string;
+  bone: string;
+  zIndex: number;
+  pivotX: number;
+  pivotY: number;
+  imageDataUrl: string;
+}
 
-async function rasterizePet(pet: PetPackage) {
+const rasterCache = new Map<string, NativePetLayer[]>();
+
+async function rasterizePetLayers(pet: PetPackage) {
   const cacheKey = `${pet.petId}:${pet.createdAt}`;
   const cached = rasterCache.get(cacheKey);
   if (cached) return cached;
-  const canvas = document.createElement("canvas");
-  canvas.width = pet.canvas.width;
-  canvas.height = pet.canvas.height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("无法创建原生桌宠图片");
+
+  const layers: NativePetLayer[] = [];
+  const legacyCanvas = pet.bones.some((bone) => bone.id === "arm-left") ? null : document.createElement("canvas");
+  const legacyContext = legacyCanvas?.getContext("2d") ?? null;
+  if (legacyCanvas) {
+    legacyCanvas.width = pet.canvas.width;
+    legacyCanvas.height = pet.canvas.height;
+  }
   for (const slot of [...pet.slots].sort((left, right) => left.zIndex - right.zIndex)) {
+    const canvas = document.createElement("canvas");
+    canvas.width = pet.canvas.width;
+    canvas.height = pet.canvas.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("无法创建原生桌宠图层");
     const image = await loadLayer(slot.dataUrl, slot.id);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    legacyContext?.drawImage(image, 0, 0, pet.canvas.width, pet.canvas.height);
+    const bone = pet.bones.find((item) => item.id === slot.bone);
+    layers.push({
+      id: slot.id,
+      bone: slot.bone,
+      zIndex: slot.zIndex,
+      pivotX: bone?.pivotX ?? 0.5,
+      pivotY: bone?.pivotY ?? 0.5,
+      imageDataUrl: canvas.toDataURL("image/png"),
+    });
   }
-  const result = canvas.toDataURL("image/png");
-  rasterCache.set(cacheKey, result);
-  return result;
+  if (legacyCanvas) {
+    const legacyLayers: NativePetLayer[] = [{
+      id: "legacy",
+      bone: "root",
+      zIndex: 0,
+      pivotX: 0.5,
+      pivotY: 0.9,
+      imageDataUrl: legacyCanvas.toDataURL("image/png"),
+    }];
+    rasterCache.set(cacheKey, legacyLayers);
+    return legacyLayers;
+  }
+  rasterCache.set(cacheKey, layers);
+  return layers;
 }
 
 function loadLayer(dataUrl: string, slotId: string) {

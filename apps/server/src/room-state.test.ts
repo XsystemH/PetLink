@@ -46,4 +46,15 @@ describe("RoomStateManager", () => {
     state.returnHome("alice");
     expect(state.snapshot("room-alice").pets[0]?.ownerUserId).toBe("alice");
   });
+
+  it("commits the final drag position atomically", () => {
+    const state = new RoomStateManager(["alice"]);
+    state.connect("alice");
+    state.beginDrag("alice", "pet-alice");
+    state.endDrag("alice", "pet-alice", { x: 0.72, y: 0.88 });
+
+    const pet = state.snapshot("room-alice").pets[0];
+    expect(pet?.position).toEqual({ x: 0.72, y: 0.88 });
+    expect(pet?.action).toBe("idle");
+  });
 });

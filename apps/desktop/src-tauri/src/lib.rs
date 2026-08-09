@@ -174,15 +174,32 @@ fn upsert_pet_window(
     y: f64,
     scale: f64,
     payload: Value,
-    image_data_url: String,
+    package_revision: i64,
+    layers: Value,
+    animations: Value,
 ) -> Result<(), String> {
     if !safe_pet_id(&pet_id) {
         return Err("invalid pet id".to_string());
     }
-    if image_data_url.len() > 12 * 1024 * 1024
-        || !image_data_url.starts_with("data:image/png;base64,")
-    {
-        return Err("invalid native pet image".to_string());
+    let layer_list = layers
+        .as_array()
+        .ok_or_else(|| "native pet layers are missing".to_string())?;
+    if layer_list.is_empty() || layer_list.len() > 10 {
+        return Err("native pet layer count is invalid".to_string());
+    }
+    let mut total_image_bytes = 0usize;
+    for layer in layer_list {
+        let image = layer
+            .get("imageDataUrl")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "native pet layer image is missing".to_string())?;
+        if !image.starts_with("data:image/png;base64,") {
+            return Err("invalid native pet layer image".to_string());
+        }
+        total_image_bytes = total_image_bytes.saturating_add(image.len());
+    }
+    if total_image_bytes > 32 * 1024 * 1024 {
+        return Err("native pet layers are larger than 32 MB".to_string());
     }
     let pet_state = payload
         .get("state")
@@ -207,7 +224,9 @@ fn upsert_pet_window(
             "action": pet_state.get("action").and_then(Value::as_str).unwrap_or("idle"),
             "direction": pet_state.get("direction").and_then(Value::as_str).unwrap_or("right"),
             "isOwner": owner_user_id == self_user_id,
-            "imageDataUrl": image_data_url
+            "packageRevision": package_revision,
+            "layers": layers,
+            "animations": animations
         }),
         true,
     )

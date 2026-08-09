@@ -11,15 +11,10 @@ import {
   type RoomSnapshot,
   type ServerMessage,
 } from "@petlink/protocol";
-import { PetCropEditor } from "./components/PetCropEditor";
+import { PetPartsEditor } from "./components/PetPartsEditor";
 import { fetchPet, joinSession, uploadPet, type Session } from "./lib/api";
 import { createFallbackPet } from "./lib/fallback-pet";
-import {
-  DEFAULT_ALIGNMENT,
-  generatePetFromImage,
-  loadSourceImage,
-  type PetAlignment,
-} from "./lib/generate-pet";
+import { createDefaultPartSources, generatePetFromParts } from "./lib/generate-pet";
 import {
   hideAllNativePets,
   listenForMainMessages,
@@ -45,9 +40,7 @@ export function App() {
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [packages, setPackages] = useState<Record<string, PetPackage>>({});
   const [draftPet, setDraftPet] = useState<PetPackage | null>(null);
-  const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [sourceImage, setSourceImage] = useState<ImageBitmap | null>(null);
-  const [alignment, setAlignment] = useState<PetAlignment>(DEFAULT_ALIGNMENT);
+  const [partSources, setPartSources] = useState(createDefaultPartSources);
   const [petName, setPetName] = useState("我的桌宠");
   const [ownAccess, setOwnAccess] = useState<RoomAccess>(defaultAccess);
   const [randomBehavior, setRandomBehavior] = useState(localStorage.getItem("petlink:random") !== "false");
@@ -58,11 +51,17 @@ export function App() {
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const revisionsRef = useRef(new Map<string, number>());
   const autoStartedRef = useRef(false);
+  const roomRef = useRef<RoomSnapshot | null>(null);
+  const noticeResetRef = useRef<number | null>(null);
 
   const activeUserId = session?.userId ?? (userId.trim().toLowerCase() || null);
   const self = members.find((member) => member.userId === activeUserId);
   const currentOwner = members.find((member) => member.roomId === self?.currentRoomId);
   const isHome = !self || self.currentRoomId === self.roomId;
+
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
 
   useEffect(() => {
     if (autoStartedRef.current) return;
@@ -147,8 +146,18 @@ export function App() {
         setMembers(message.members);
         break;
       case "NOTICE":
-      case "ERROR":
         setNotice(message.message);
+        break;
+      case "ERROR":
+        if (message.code === "RATE_LIMITED") {
+          setNotice("拖拽消息已自动限速，位置仍会在松手时准确同步。");
+          if (noticeResetRef.current !== null) window.clearTimeout(noticeResetRef.current);
+          noticeResetRef.current = window.setTimeout(() => {
+            setNotice("联机正常。桌宠会直接显示在电脑桌面上。");
+          }, 2_500);
+        } else {
+          setNotice(message.message);
+        }
         break;
       case "PONG":
         break;
@@ -185,7 +194,8 @@ export function App() {
   }, [room, packages, activeUserId]);
 
   useEffect(() => {
-    let dispose = () => {};
+    let dispose: (() => void) | undefined;
+    let cancelled = false;
     const listener = (message: PetWindowMessage) => {
       if (message.type === "open-settings") {
         void showControlCenter();
@@ -195,14 +205,13 @@ export function App() {
         setNotice(`原生桌宠错误：${message.message}`);
         return;
       }
-      if (!room || !activeUserId) return;
+      if (!roomRef.current || !activeUserId) return;
       if (message.type === "drag-start") {
         sendOrApply({ type: "DRAG_BEGIN", petId: message.petId });
       } else if (message.type === "drag-move") {
         sendOrApply({ type: "DRAG_MOVE", petId: message.petId, position: message.position });
       } else if (message.type === "drag-end") {
-        sendOrApply({ type: "DRAG_MOVE", petId: message.petId, position: message.position });
-        sendOrApply({ type: "DRAG_END", petId: message.petId });
+        sendOrApply({ type: "DRAG_END", petId: message.petId, position: message.position });
       } else if (message.type === "interact") {
         sendOrApply({ type: "INTERACT", petId: message.petId });
       } else if (message.type === "set-action") {
@@ -210,24 +219,39 @@ export function App() {
       }
     };
     void listenForMainMessages(listener).then((unlisten) => {
-      dispose = unlisten;
+      if (cancelled) unlisten();
+      else dispose = unlisten;
     });
-    return () => dispose();
-  }, [room, packages, activeUserId]);
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, [activeUserId]);
 
   useEffect(() => {
     if (!randomBehavior || !activeUserId) return;
     const timer = window.setInterval(() => {
-      const ownPet = room?.pets.find((pet) => pet.ownerUserId === activeUserId);
-      if (!ownPet || ownPet.action === "dragged" || ownPet.action === "sleep") return;
+      const ownPet = roomRef.current?.pets.find((pet) => pet.ownerUserId === activeUserId);
+      if (!ownPet || ownPet.action === "dragged") return;
+      if (ownPet.action === "sleep") {
+        if (Date.now() - ownPet.actionStartedAt >= 10_000) {
+          sendOrApply({ type: "SET_ACTION", action: "idle" });
+        }
+        return;
+      }
       const roll = Math.random();
-      if (roll < 0.7) moveSomewhere();
-      else sendOrApply({ type: "SET_ACTION", action: roll < 0.92 ? "idle" : "sleep" });
-    }, 8_000);
+      if (roll < 0.68) moveSomewhere();
+      else if (roll < 0.82) sendOrApply({ type: "SET_ACTION", action: "idle" });
+      else if (roll < 0.94) sendOrApply({ type: "SET_ACTION", action: "interact" });
+      else sendOrApply({ type: "SET_ACTION", action: "sleep" });
+    }, 4_500);
     return () => window.clearInterval(timer);
-  }, [randomBehavior, room, activeUserId]);
+  }, [randomBehavior, activeUserId]);
 
-  useEffect(() => () => realtimeRef.current?.close(), []);
+  useEffect(() => () => {
+    realtimeRef.current?.close();
+    if (noticeResetRef.current !== null) window.clearTimeout(noticeResetRef.current);
+  }, []);
 
   function command(payload: Record<string, unknown>) {
     return realtimeRef.current?.send({ ...makeEnvelope(), ...payload } as never) ?? false;
@@ -251,27 +275,14 @@ export function App() {
     else sendOrApply({ type: "SET_ACTION", action });
   }
 
-  async function chooseSource(file: File) {
-    try {
-      const image = await loadSourceImage(file);
-      sourceImage?.close();
-      setSourceFile(file);
-      setSourceImage(image);
-      setAlignment(DEFAULT_ALIGNMENT);
-      setNotice("拖动和缩放图片，让头部、身体与虚线框对齐，然后点击“生成并应用”。");
-    } catch (error) {
-      setNotice(errorMessage(error, "无法读取图片"));
-    }
-  }
-
   async function generate() {
-    if (!activeUserId || !sourceFile) {
-      setNotice("请先登录并选择一张角色图片。");
+    if (!activeUserId) {
+      setNotice("请先登录后再生成桌宠。");
       return;
     }
     setGenerating(true);
     try {
-      const generated = await generatePetFromImage(sourceFile, activeUserId, petName, alignment);
+      const generated = await generatePetFromParts(partSources, activeUserId, petName);
       await saveLocalPet(activeUserId, generated);
       setDraftPet(generated);
       setPackages((current) => ({ ...current, [activeUserId]: generated }));
@@ -364,23 +375,13 @@ export function App() {
             </section>
 
             <section className="card generator-card">
-              <SectionTitle number="2" title="从图片生成桌宠" description="把角色对齐固定骨架；生成后立即替换桌面上的桌宠。" />
-              {!sourceImage ? (
-                <label className="upload-box">
-                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseSource(file); }} />
-                  <strong>选择角色图片</strong>
-                  <span>推荐透明背景 PNG；也支持纯色背景图片</span>
-                </label>
-              ) : (
-                <>
-                  <PetCropEditor image={sourceImage} alignment={alignment} onChange={setAlignment} />
-                  <div className="generator-fields">
-                    <label>桌宠名称<input value={petName} maxLength={40} onChange={(event) => setPetName(event.target.value)} /></label>
-                    <label className="replace-source">更换图片<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseSource(file); }} /></label>
-                  </div>
-                  <button className="primary" disabled={generating} onClick={() => void generate()}>{generating ? "正在生成……" : "生成并应用到桌面"}</button>
-                </>
-              )}
+              <SectionTitle number="2" title="组合骨骼桌宠" description="头、躯干、双耳和四肢分别使用照片或纯色，并绑定同一套固定骨骼。" />
+              <PetPartsEditor value={partSources} onChange={setPartSources} />
+              <div className="generator-fields">
+                <label>桌宠名称<input value={petName} maxLength={40} onChange={(event) => setPetName(event.target.value)} /></label>
+                <button className="reset-parts" type="button" onClick={() => setPartSources(createDefaultPartSources())}>恢复默认素材</button>
+              </div>
+              <button className="primary" disabled={generating} onClick={() => void generate()}>{generating ? "正在生成……" : "生成并应用到桌面"}</button>
             </section>
           </div>
 
@@ -484,7 +485,14 @@ function applyLocalCommand(room: RoomSnapshot, userId: string, command: Record<s
       case "DRAG_MOVE":
         return { ...pet, position: command.position as { x: number; y: number }, target: undefined, action: "dragged", revision: pet.revision + 1 };
       case "DRAG_END":
-        return { ...pet, action: "idle", actionStartedAt: now, revision: pet.revision + 1 };
+        return {
+          ...pet,
+          position: command.position as { x: number; y: number },
+          target: undefined,
+          action: "idle",
+          actionStartedAt: now,
+          revision: pet.revision + 1,
+        };
       case "INTERACT":
         return { ...pet, action: "interact", actionStartedAt: now, revision: pet.revision + 1 };
       default:

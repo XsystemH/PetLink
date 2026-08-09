@@ -102,7 +102,12 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     petId: petIdSchema,
     position: normalizedPointSchema,
   }),
-  z.object({ ...envelopeBase, type: z.literal("DRAG_END"), petId: petIdSchema }),
+  z.object({
+    ...envelopeBase,
+    type: z.literal("DRAG_END"),
+    petId: petIdSchema,
+    position: normalizedPointSchema,
+  }),
   z.object({
     ...envelopeBase,
     type: z.literal("INTERACT"),
@@ -201,8 +206,8 @@ export const petPackageSchema = z.object({
     width: z.number().int().min(64).max(1024),
     height: z.number().int().min(64).max(1024),
   }),
-  bones: z.array(boneSchema).min(3).max(7),
-  slots: z.array(textureSlotSchema).min(2).max(7),
+  bones: z.array(boneSchema).min(3).max(10),
+  slots: z.array(textureSlotSchema).min(2).max(10),
   animations: z.object({
     idle: animationSchema,
     move: animationSchema,

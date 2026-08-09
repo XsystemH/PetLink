@@ -21,7 +21,12 @@ const store = new FileStore(config.dataDir);
 await store.initialize();
 const state = new RoomStateManager(config.userIds, await store.loadState());
 
-const sockets = new Map<string, { id: string; socket: WebSocket; messageTimes: number[] }>();
+const sockets = new Map<string, {
+  id: string;
+  socket: WebSocket;
+  messageTimes: number[];
+  lastRateLimitNoticeAt: number;
+}>();
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const joinAttempts = new Map<string, number[]>();
 const pendingDisplayNames = new Map<string, string>();
@@ -192,7 +197,7 @@ websocketServer.on("connection", (socket: WebSocket, userId: string) => {
   const connectionId = randomUUID();
   const old = sockets.get(userId);
   if (old) old.socket.close(4001, "Replaced by a newer connection");
-  sockets.set(userId, { id: connectionId, socket, messageTimes: [] });
+  sockets.set(userId, { id: connectionId, socket, messageTimes: [], lastRateLimitNoticeAt: 0 });
   const timer = disconnectTimers.get(userId);
   if (timer) clearTimeout(timer);
   disconnectTimers.delete(userId);
@@ -218,7 +223,10 @@ websocketServer.on("connection", (socket: WebSocket, userId: string) => {
     connection.messageTimes = connection.messageTimes.filter((time) => now - time < 1_000);
     connection.messageTimes.push(now);
     if (connection.messageTimes.length > 60) {
-      sendError(socket, "RATE_LIMITED", "操作过于频繁");
+      if (now - connection.lastRateLimitNoticeAt >= 1_000) {
+        connection.lastRateLimitNoticeAt = now;
+        sendError(socket, "RATE_LIMITED", "操作过于频繁，已自动忽略多余操作");
+      }
       return;
     }
 
@@ -247,7 +255,7 @@ websocketServer.on("connection", (socket: WebSocket, userId: string) => {
           affected.add(state.dragMove(userId, message.petId, message.position));
           break;
         case "DRAG_END":
-          affected.add(state.endDrag(userId, message.petId));
+          affected.add(state.endDrag(userId, message.petId, message.position));
           break;
         case "INTERACT":
           affected.add(state.interact(userId, message.petId));

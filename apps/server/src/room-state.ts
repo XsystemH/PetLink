@@ -218,10 +218,12 @@ export class RoomStateManager {
     return pet.currentRoomId;
   }
 
-  endDrag(userId: string, petId: string) {
+  endDrag(userId: string, petId: string, position: { x: number; y: number }) {
     const pet = this.requirePetInCurrentRoom(userId, petId);
     const lock = this.locks.get(petId);
     if (lock?.userId === userId) this.locks.delete(petId);
+    pet.position = position;
+    pet.target = undefined;
     pet.action = "idle";
     pet.actionStartedAt = Date.now();
     pet.revision += 1;
