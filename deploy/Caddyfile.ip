@@ -1,0 +1,8 @@
+:80 {
+  encode zstd gzip
+  reverse_proxy server:8787
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "no-referrer"
+  }
+}

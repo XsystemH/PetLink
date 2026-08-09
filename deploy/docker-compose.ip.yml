@@ -1,0 +1,36 @@
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      PETLINK_HOST: 0.0.0.0
+      PETLINK_PORT: 8787
+      PETLINK_PUBLIC_URL: http://${PETLINK_PUBLIC_HOST}
+      PETLINK_ORIGIN: http://tauri.localhost,https://tauri.localhost
+      PETLINK_TOKEN_SECRET: ${PETLINK_TOKEN_SECRET}
+      PETLINK_USERS: ${PETLINK_USERS}
+      PETLINK_DATA_DIR: /app/data
+    volumes:
+      - petlink-data:/app/data
+    networks:
+      - petlink
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro
+    networks:
+      - petlink
+    depends_on:
+      - server
+
+networks:
+  petlink:
+
+volumes:
+  petlink-data:
