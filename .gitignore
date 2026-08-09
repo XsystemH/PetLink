@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.env
+*.log
+.DS_Store
+Thumbs.db
+apps/server/data/*
+!apps/server/data/.gitkeep
+apps/desktop/src-tauri/gen/
+coverage/
+*.petpack

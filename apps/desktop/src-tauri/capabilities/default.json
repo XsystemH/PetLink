@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "PetLink control center and generated pet overlays",
+  "windows": ["main", "overlay-pet-*"],
+  "permissions": ["core:default"]
+}
