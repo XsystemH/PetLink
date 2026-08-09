@@ -57,6 +57,8 @@ export async function syncNativePets(
   packages: Record<string, PetPackage>,
   selfUserId: string,
   randomBehavior: boolean,
+  randomMinSeconds: number,
+  randomMaxSeconds: number,
 ) {
   if (!isTauri()) return;
   const { invoke } = await import("@tauri-apps/api/core");
@@ -83,6 +85,8 @@ export async function syncNativePets(
       layers,
       animations: petPackage.animations,
       randomBehavior: randomBehavior && pet.ownerUserId === selfUserId,
+      randomMinSeconds,
+      randomMaxSeconds,
     });
   }
 }

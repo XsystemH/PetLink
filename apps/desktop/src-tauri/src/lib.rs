@@ -178,6 +178,8 @@ fn upsert_pet_window(
     layers: Value,
     animations: Value,
     random_behavior: bool,
+    random_min_seconds: f64,
+    random_max_seconds: f64,
 ) -> Result<(), String> {
     if !safe_pet_id(&pet_id) {
         return Err("invalid pet id".to_string());
@@ -228,7 +230,9 @@ fn upsert_pet_window(
             "packageRevision": package_revision,
             "layers": layers,
             "animations": animations,
-            "randomBehavior": random_behavior
+            "randomBehavior": random_behavior,
+            "randomMinSeconds": random_min_seconds.clamp(3.0, 120.0),
+            "randomMaxSeconds": random_max_seconds.clamp(3.0, 120.0)
         }),
         true,
     )

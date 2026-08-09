@@ -175,6 +175,28 @@ label input:focus { border-color: rgba(157, 78, 105, 0.55); box-shadow: 0 0 0 3p
 .toggle-row input:checked + i { background: var(--sage); }
 .toggle-row input:checked + i::after { transform: translateX(15px); }
 
+.random-timing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 0 11px;
+  transition: opacity 0.18s;
+}
+.random-timing.disabled { opacity: 0.5; }
+.random-timing > span { display: grid; gap: 2px; min-width: 0; }
+.random-timing strong { color: var(--ink); font-size: 11px; }
+.random-timing small { color: var(--muted); font-size: 9px; }
+.random-timing label { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10px; }
+.random-timing input {
+  width: 49px;
+  margin: 0;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+
 .parts-editor { display: grid; gap: 11px; }
 .parts-help {
   padding: 10px 12px;

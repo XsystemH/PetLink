@@ -85,7 +85,9 @@ namespace PetLink.NativeHost
                     ValueReader.Text(command, "action", "idle"),
                     ValueReader.Text(command, "direction", "right"),
                     ValueReader.Bool(command, "isOwner", false),
-                    ValueReader.Bool(command, "randomBehavior", false));
+                    ValueReader.Bool(command, "randomBehavior", false),
+                    ValueReader.Number(command, "randomMinSeconds", 8),
+                    ValueReader.Number(command, "randomMaxSeconds", 18));
                 pet.ShowPet();
             }
             else if (type == "hide-others")
@@ -195,12 +197,16 @@ namespace PetLink.NativeHost
         private bool isOwner;
         private bool randomBehavior;
         private bool hasRunRandomBehavior;
+        private bool movementInProgress;
         private bool awaitingDragAck;
         private string action = "idle";
         private DateTime actionStarted = DateTime.UtcNow;
         private DateTime lastDragPositionEmit = DateTime.MinValue;
         private DateTime suppressRemotePositionUntil = DateTime.MinValue;
-        private DateTime nextRandomBehaviorAt = DateTime.UtcNow.AddSeconds(4.5);
+        private DateTime nextRandomBehaviorAt = DateTime.MaxValue;
+        private DateTime lastAnimationTick = DateTime.UtcNow;
+        private double randomMinSeconds = 8;
+        private double randomMaxSeconds = 18;
         private double targetLeft;
         private double targetTop;
         private double pendingDragLeft;
@@ -256,14 +262,25 @@ namespace PetLink.NativeHost
             string nextAction,
             string direction,
             bool owner,
-            bool nextRandomBehavior)
+            bool nextRandomBehavior,
+            double nextRandomMinSeconds,
+            double nextRandomMaxSeconds)
         {
             isOwner = owner;
-            if (randomBehavior != nextRandomBehavior)
+            var normalizedMinimum = Clamp(Math.Min(nextRandomMinSeconds, nextRandomMaxSeconds), 3, 120);
+            var normalizedMaximum = Clamp(Math.Max(nextRandomMinSeconds, nextRandomMaxSeconds), normalizedMinimum, 120);
+            var behaviorSettingChanged = randomBehavior != nextRandomBehavior
+                || Math.Abs(randomMinSeconds - normalizedMinimum) > 0.01
+                || Math.Abs(randomMaxSeconds - normalizedMaximum) > 0.01;
+            if (behaviorSettingChanged)
             {
+                var wasEnabled = randomBehavior;
                 randomBehavior = nextRandomBehavior;
-                hasRunRandomBehavior = false;
-                nextRandomBehaviorAt = DateTime.UtcNow.AddSeconds(2);
+                randomMinSeconds = normalizedMinimum;
+                randomMaxSeconds = normalizedMaximum;
+                if (!wasEnabled && randomBehavior) hasRunRandomBehavior = false;
+                if (randomBehavior && !movementInProgress) ScheduleNextRandomBehavior(DateTime.UtcNow);
+                else nextRandomBehaviorAt = DateTime.MaxValue;
             }
             if (packageRevision != nextPackageRevision)
             {
@@ -278,6 +295,7 @@ namespace PetLink.NativeHost
             var area = SystemParameters.WorkArea;
             var remoteLeft = area.Left + Clamp(x, 0, 1) * area.Width - nextSize / 2.0;
             var remoteTop = area.Top + Clamp(y, 0, 1) * area.Height - nextSize * 0.78;
+            var targetChanged = Distance(targetLeft, targetTop, remoteLeft, remoteTop) > 0.75;
 
             if (awaitingDragAck)
             {
@@ -309,6 +327,12 @@ namespace PetLink.NativeHost
                 {
                     Left = remoteLeft;
                     Top = remoteTop;
+                    movementInProgress = false;
+                }
+                else if (targetChanged)
+                {
+                    movementInProgress = true;
+                    nextRandomBehaviorAt = DateTime.MaxValue;
                 }
             }
 
@@ -316,7 +340,15 @@ namespace PetLink.NativeHost
             {
                 action = nextAction;
                 actionStarted = DateTime.UtcNow;
-                if (action == "sleep") nextRandomBehaviorAt = actionStarted.AddSeconds(10);
+                if (action != "move")
+                {
+                    movementInProgress = false;
+                    if (randomBehavior) ScheduleNextRandomBehavior(actionStarted);
+                }
+                else if (!movementInProgress && randomBehavior)
+                {
+                    ScheduleNextRandomBehavior(actionStarted);
+                }
             }
             directionTransform.ScaleX = direction == "left" ? -1 : 1;
         }
@@ -449,21 +481,28 @@ namespace PetLink.NativeHost
 
         private void Animate(object sender, EventArgs args)
         {
+            var now = DateTime.UtcNow;
+            var deltaSeconds = Clamp((now - lastAnimationTick).TotalSeconds, 0, 0.1);
+            lastAnimationTick = now;
             RunRandomBehavior();
             var moving = false;
-            if (!dragging && action == "move")
+            if (!dragging && action == "move" && movementInProgress)
             {
                 var distance = Distance(Left, Top, targetLeft, targetTop);
                 if (distance > 0.75)
                 {
-                    Left += (targetLeft - Left) * 0.16;
-                    Top += (targetTop - Top) * 0.16;
-                    moving = true;
+                    const double moveSpeed = 90.0;
+                    var step = Math.Min(distance, moveSpeed * deltaSeconds);
+                    Left += (targetLeft - Left) / distance * step;
+                    Top += (targetTop - Top) / distance * step;
+                    moving = step < distance - 0.75;
                 }
-                else
+                if (!moving)
                 {
                     Left = targetLeft;
                     Top = targetTop;
+                    movementInProgress = false;
+                    if (randomBehavior) ScheduleNextRandomBehavior(now);
                 }
             }
 
@@ -498,8 +537,8 @@ namespace PetLink.NativeHost
         private void RunRandomBehavior()
         {
             var now = DateTime.UtcNow;
-            if (!isOwner || !randomBehavior || dragging || awaitingDragAck || now < nextRandomBehaviorAt) return;
-            nextRandomBehaviorAt = now.AddSeconds(4.5);
+            if (!isOwner || !randomBehavior || dragging || awaitingDragAck || movementInProgress || now < nextRandomBehaviorAt) return;
+            ScheduleNextRandomBehavior(now);
             if (action == "sleep")
             {
                 EmitAction("idle");
@@ -518,6 +557,12 @@ namespace PetLink.NativeHost
             else if (roll < 0.82) EmitAction("idle");
             else if (roll < 0.94) EmitAction("interact");
             else EmitAction("sleep");
+        }
+
+        private void ScheduleNextRandomBehavior(DateTime now)
+        {
+            var delaySeconds = randomMinSeconds + Program.BehaviorRandom.NextDouble() * (randomMaxSeconds - randomMinSeconds);
+            nextRandomBehaviorAt = now.AddSeconds(delaySeconds);
         }
 
         private void EmitRandomMove()

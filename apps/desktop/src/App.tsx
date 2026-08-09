@@ -29,6 +29,12 @@ import { RealtimeClient, type ConnectionStatus } from "./lib/realtime";
 
 const defaultAccess: RoomAccess = { allowVisitsWhileOwnerAway: true, allowFriendDrag: false };
 const defaultServer = "http://116.62.37.128";
+const randomDelayBounds = { minimum: 3, maximum: 120 };
+
+interface RandomTiming {
+  minimum: number;
+  maximum: number;
+}
 
 export function App() {
   const [serverUrl, setServerUrl] = useState(localStorage.getItem("petlink:server") ?? defaultServer);
@@ -45,6 +51,7 @@ export function App() {
   const [petName, setPetName] = useState("我的桌宠");
   const [ownAccess, setOwnAccess] = useState<RoomAccess>(defaultAccess);
   const [randomBehavior, setRandomBehavior] = useState(localStorage.getItem("petlink:random") !== "false");
+  const [randomTiming, setRandomTiming] = useState<RandomTiming>(loadRandomTiming);
   const [petScale, setPetScale] = useState(Number(localStorage.getItem("petlink:scale") ?? 1));
   const [connecting, setConnecting] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -189,10 +196,10 @@ export function App() {
 
   useEffect(() => {
     if (!room || !activeUserId) return;
-    void syncNativePets(room, packages, activeUserId, randomBehavior).catch((error) => {
+    void syncNativePets(room, packages, activeUserId, randomBehavior, randomTiming.minimum, randomTiming.maximum).catch((error) => {
       setNotice(`桌宠窗口显示失败：${errorMessage(error, "未知错误")}`);
     });
-  }, [room, packages, activeUserId, randomBehavior]);
+  }, [room, packages, activeUserId, randomBehavior, randomTiming.minimum, randomTiming.maximum]);
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
@@ -233,13 +240,20 @@ export function App() {
 
   useEffect(() => {
     if (isTauri() || !randomBehavior || !activeUserId) return;
-    const timer = window.setInterval(() => {
+    let timer: number | undefined;
+    const schedule = () => {
+      const delaySeconds = randomTiming.minimum + Math.random() * (randomTiming.maximum - randomTiming.minimum);
+      timer = window.setTimeout(run, delaySeconds * 1_000);
+    };
+    const run = () => {
       const ownPet = roomRef.current?.pets.find((pet) => pet.ownerUserId === activeUserId);
-      if (!ownPet || ownPet.action === "dragged") return;
+      if (!ownPet || ownPet.action === "dragged") {
+        schedule();
+        return;
+      }
       if (ownPet.action === "sleep") {
-        if (Date.now() - ownPet.actionStartedAt >= 10_000) {
-          sendOrApply({ type: "SET_ACTION", action: "idle" });
-        }
+        sendOrApply({ type: "SET_ACTION", action: "idle" });
+        schedule();
         return;
       }
       const roll = Math.random();
@@ -247,9 +261,13 @@ export function App() {
       else if (roll < 0.82) sendOrApply({ type: "SET_ACTION", action: "idle" });
       else if (roll < 0.94) sendOrApply({ type: "SET_ACTION", action: "interact" });
       else sendOrApply({ type: "SET_ACTION", action: "sleep" });
-    }, 4_500);
-    return () => window.clearInterval(timer);
-  }, [randomBehavior, activeUserId]);
+      schedule();
+    };
+    schedule();
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [randomBehavior, activeUserId, randomTiming.minimum, randomTiming.maximum]);
 
   useEffect(() => () => {
     realtimeRef.current?.close();
@@ -319,6 +337,20 @@ export function App() {
     localStorage.setItem("petlink:random", String(next));
   }
 
+  function setRandomMinimum(next: number) {
+    setRandomTiming((current) => saveRandomTiming({
+      minimum: clampRandomDelay(next),
+      maximum: Math.max(current.maximum, clampRandomDelay(next)),
+    }));
+  }
+
+  function setRandomMaximum(next: number) {
+    setRandomTiming((current) => saveRandomTiming({
+      minimum: Math.min(current.minimum, clampRandomDelay(next)),
+      maximum: clampRandomDelay(next),
+    }));
+  }
+
   async function signOut() {
     realtimeRef.current?.close();
     realtimeRef.current = null;
@@ -375,6 +407,11 @@ export function App() {
                 <input type="range" min="0.5" max="2" step="0.1" value={petScale} onChange={(event) => updateScale(Number(event.target.value))} />
               </label>
               <Toggle label="随机游走" description="桌宠会在桌面底部走动、待机和偶尔休息。" checked={randomBehavior} onChange={setRandom} />
+              <div className={`random-timing${randomBehavior ? "" : " disabled"}`}>
+                <span><strong>行为触发间隔</strong><small>保持当前状态后随机等待</small></span>
+                <label>最短<input aria-label="随机行为最短等待秒数" type="number" min={randomDelayBounds.minimum} max={randomDelayBounds.maximum} step="1" disabled={!randomBehavior} value={randomTiming.minimum} onChange={(event) => setRandomMinimum(Number(event.target.value))} /> 秒</label>
+                <label>最长<input aria-label="随机行为最长等待秒数" type="number" min={randomDelayBounds.minimum} max={randomDelayBounds.maximum} step="1" disabled={!randomBehavior} value={randomTiming.maximum} onChange={(event) => setRandomMaximum(Number(event.target.value))} /> 秒</label>
+              </div>
             </section>
 
             <section className="card generator-card">
@@ -507,6 +544,26 @@ function applyLocalCommand(room: RoomSnapshot, userId: string, command: Record<s
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function clampRandomDelay(value: number) {
+  const rounded = Math.round(Number.isFinite(value) ? value : randomDelayBounds.minimum);
+  return Math.min(randomDelayBounds.maximum, Math.max(randomDelayBounds.minimum, rounded));
+}
+
+function loadRandomTiming(): RandomTiming {
+  const storedMinimum = clampRandomDelay(Number(localStorage.getItem("petlink:random-min-seconds") ?? 8));
+  const storedMaximum = clampRandomDelay(Number(localStorage.getItem("petlink:random-max-seconds") ?? 18));
+  return {
+    minimum: Math.min(storedMinimum, storedMaximum),
+    maximum: Math.max(storedMinimum, storedMaximum),
+  };
+}
+
+function saveRandomTiming(timing: RandomTiming) {
+  localStorage.setItem("petlink:random-min-seconds", String(timing.minimum));
+  localStorage.setItem("petlink:random-max-seconds", String(timing.maximum));
+  return timing;
 }
 
 function memberDisplayName(member: MemberSummary) {
