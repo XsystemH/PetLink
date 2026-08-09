@@ -29,4 +29,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm run build -w @petlink/protocol
+      - run: npm run build:native -w @petlink/desktop
       - run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --locked

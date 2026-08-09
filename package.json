@@ -12,8 +12,7 @@
     "check": "npm run check -w @petlink/protocol && npm run check -w @petlink/server && npm run check -w @petlink/desktop",
     "test": "npm run test -w @petlink/protocol && npm run test -w @petlink/server && npm run test -w @petlink/desktop",
     "dev:server": "npm run build -w @petlink/protocol && npm run dev -w @petlink/server",
-    "dev:desktop": "npm run build -w @petlink/protocol && npm run tauri:dev -w @petlink/desktop",
-    "dev:web": "npm run build -w @petlink/protocol && npm run dev -w @petlink/desktop"
+    "dev:desktop": "npm run build -w @petlink/protocol && npm run tauri:dev -w @petlink/desktop"
   },
   "engines": {
     "node": ">=18.18"

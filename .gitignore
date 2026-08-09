@@ -10,3 +10,4 @@ apps/server/data/*
 apps/desktop/src-tauri/gen/
 coverage/
 *.petpack
+apps/desktop/src-tauri/native/*.exe

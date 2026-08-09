@@ -61,14 +61,14 @@ export function createFallbackPet(userId: string, displayName = "桌宠"): PetPa
   const colorSeed = [...userId].reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const hue = colorSeed % 360;
   const body = svgData(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">
-    <ellipse cx="256" cy="354" rx="116" ry="122" fill="hsl(${hue} 62% 68%)"/>
-    <ellipse cx="218" cy="445" rx="52" ry="25" fill="hsl(${hue} 55% 52%)"/>
-    <ellipse cx="294" cy="445" rx="52" ry="25" fill="hsl(${hue} 55% 52%)"/>
+    <ellipse cx="256" cy="354" rx="116" ry="122" fill="hsl(${hue}, 62%, 68%)"/>
+    <ellipse cx="218" cy="445" rx="52" ry="25" fill="hsl(${hue}, 55%, 52%)"/>
+    <ellipse cx="294" cy="445" rx="52" ry="25" fill="hsl(${hue}, 55%, 52%)"/>
   </svg>`);
   const head = svgData(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">
-    <circle cx="256" cy="204" r="126" fill="hsl(${hue} 70% 76%)"/>
-    <path d="M154 118 L190 42 L228 105" fill="hsl(${hue} 70% 76%)"/>
-    <path d="M284 105 L322 42 L358 118" fill="hsl(${hue} 70% 76%)"/>
+    <circle cx="256" cy="204" r="126" fill="hsl(${hue}, 70%, 76%)"/>
+    <path d="M154 118 L190 42 L228 105" fill="hsl(${hue}, 70%, 76%)"/>
+    <path d="M284 105 L322 42 L358 118" fill="hsl(${hue}, 70%, 76%)"/>
     <circle cx="212" cy="204" r="13" fill="#342d3b"/><circle cx="300" cy="204" r="13" fill="#342d3b"/>
     <path d="M232 246 Q256 266 280 246" fill="none" stroke="#342d3b" stroke-width="9" stroke-linecap="round"/>
   </svg>`);
