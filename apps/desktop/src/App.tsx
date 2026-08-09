@@ -419,7 +419,7 @@ export function App() {
               <PetPartsEditor value={partSources} onChange={setPartSources} />
               <div className="generator-fields">
                 <label>桌宠名称<input value={petName} maxLength={40} onChange={(event) => setPetName(event.target.value)} /></label>
-                <button className="reset-parts" type="button" onClick={() => setPartSources(createDefaultPartSources())}>恢复默认素材</button>
+                <button className="reset-parts" type="button" onClick={() => { setPartSources(createDefaultPartSources()); setPetName("我的桌宠"); }}>恢复初始桌宠</button>
               </div>
               <button className="primary" disabled={generating} onClick={() => void generate()}>{generating ? "正在生成……" : "生成并应用到桌面"}</button>
             </section>

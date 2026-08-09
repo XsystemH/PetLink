@@ -17,6 +17,9 @@ export interface PetPartSource {
   color: string;
   file: File | null;
   enabled: boolean;
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
 }
 
 export type PetPartSources = Record<PetPartId, PetPartSource>;
@@ -79,7 +82,7 @@ export const PET_PARTS: readonly PartDefinition[] = [
 export function createDefaultPartSources(): PetPartSources {
   return Object.fromEntries(PET_PARTS.map((part) => [
     part.id,
-    { color: part.defaultColor, file: null, enabled: true },
+    { color: part.defaultColor, file: null, enabled: true, offsetX: 0, offsetY: 0, zoom: 1 },
   ])) as PetPartSources;
 }
 
@@ -140,7 +143,7 @@ async function renderPart(part: PartDefinition, source: PetPartSource) {
   context.clip();
   if (source.file) {
     const image = await createImageBitmap(source.file);
-    drawImageCover(context, image, part.bounds);
+    drawImageCover(context, image, part.bounds, source);
     image.close();
   } else {
     context.fillStyle = validColor(source.color) ? source.color : part.defaultColor;
@@ -175,17 +178,30 @@ function drawImageCover(
   context: CanvasRenderingContext2D,
   image: ImageBitmap,
   bounds: { x: number; y: number; width: number; height: number },
+  source: Pick<PetPartSource, "offsetX" | "offsetY" | "zoom">,
 ) {
-  const scale = Math.max(bounds.width / image.width, bounds.height / image.height);
-  const width = image.width * scale;
-  const height = image.height * scale;
-  context.drawImage(
-    image,
-    bounds.x + (bounds.width - width) / 2,
-    bounds.y + (bounds.height - height) / 2,
+  const placement = calculateImagePlacement(image.width, image.height, bounds, source);
+  context.drawImage(image, placement.x, placement.y, placement.width, placement.height);
+}
+
+export function calculateImagePlacement(
+  imageWidth: number,
+  imageHeight: number,
+  bounds: { x: number; y: number; width: number; height: number },
+  source: Pick<PetPartSource, "offsetX" | "offsetY" | "zoom">,
+) {
+  const zoom = Math.min(3, Math.max(1, source.zoom));
+  const scale = Math.max(bounds.width / imageWidth, bounds.height / imageHeight) * zoom;
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  const overflowX = Math.max(0, width - bounds.width);
+  const overflowY = Math.max(0, height - bounds.height);
+  return {
+    x: bounds.x + (bounds.width - width) / 2 + Math.min(1, Math.max(-1, source.offsetX)) * overflowX / 2,
+    y: bounds.y + (bounds.height - height) / 2 + Math.min(1, Math.max(-1, source.offsetY)) * overflowY / 2,
     width,
     height,
-  );
+  };
 }
 
 function validateSource(file: File) {
