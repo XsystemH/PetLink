@@ -17,6 +17,7 @@ import { createFallbackPet } from "./lib/fallback-pet";
 import { createDefaultPartSources, generatePetFromParts } from "./lib/generate-pet";
 import {
   hideAllNativePets,
+  isTauri,
   listenForMainMessages,
   loadLocalPet,
   saveLocalPet,
@@ -188,10 +189,10 @@ export function App() {
 
   useEffect(() => {
     if (!room || !activeUserId) return;
-    void syncNativePets(room, packages, activeUserId).catch((error) => {
+    void syncNativePets(room, packages, activeUserId, randomBehavior).catch((error) => {
       setNotice(`桌宠窗口显示失败：${errorMessage(error, "未知错误")}`);
     });
-  }, [room, packages, activeUserId]);
+  }, [room, packages, activeUserId, randomBehavior]);
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
@@ -214,6 +215,8 @@ export function App() {
         sendOrApply({ type: "DRAG_END", petId: message.petId, position: message.position });
       } else if (message.type === "interact") {
         sendOrApply({ type: "INTERACT", petId: message.petId });
+      } else if (message.type === "move-to") {
+        sendOrApply({ type: "MOVE_TO", position: message.position });
       } else if (message.type === "set-action") {
         runAction(message.action);
       }
@@ -229,7 +232,7 @@ export function App() {
   }, [activeUserId]);
 
   useEffect(() => {
-    if (!randomBehavior || !activeUserId) return;
+    if (isTauri() || !randomBehavior || !activeUserId) return;
     const timer = window.setInterval(() => {
       const ownPet = roomRef.current?.pets.find((pet) => pet.ownerUserId === activeUserId);
       if (!ownPet || ownPet.action === "dragged") return;

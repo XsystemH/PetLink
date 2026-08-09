@@ -10,4 +10,6 @@ apps/server/data/*
 apps/desktop/src-tauri/gen/
 coverage/
 *.petpack
+__pycache__/
+*.pyc
 apps/desktop/src-tauri/native/*.exe

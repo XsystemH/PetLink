@@ -1,4 +1,4 @@
 interface:
   display_name: "创建 PetLink 桌宠"
-  short_description: "生成并校验适合轻量分层骨骼规范的个性化桌宠透明素材"
-  default_prompt: "使用 $create-petlink-pet 根据我的角色参考图生成可上传到 PetLink 的透明桌宠源图。"
+  short_description: "生成并校验 PetLink 固定九骨骼的分部件透明素材"
+  default_prompt: "使用 $create-petlink-pet 根据我的角色参考图生成可分别上传到 PetLink 的头、躯干、四肢和可选耳朵素材。"

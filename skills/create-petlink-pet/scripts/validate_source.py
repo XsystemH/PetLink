@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate an 8-bit transparent PNG for PetLink without third-party packages."""
+"""Validate one transparent PNG for PetLink's fixed part masks."""
 
 from __future__ import annotations
 
@@ -77,7 +77,19 @@ def read_alpha(path: Path) -> tuple[int, int, list[int]]:
     return width, height, alpha
 
 
-def validate(path: Path) -> dict[str, object]:
+PARTS = {
+    "head",
+    "body",
+    "arm-left",
+    "arm-right",
+    "leg-left",
+    "leg-right",
+    "ear-left",
+    "ear-right",
+}
+
+
+def validate(path: Path, part: str) -> dict[str, object]:
     issues: list[str] = []
     try:
         width, height, alpha = read_alpha(path)
@@ -95,21 +107,19 @@ def validate(path: Path) -> dict[str, object]:
     ys = [point[1] for point in opaque]
     left, right, top, bottom = min(xs), max(xs) + 1, min(ys), max(ys) + 1
     bounds_width, bounds_height = right - left, bottom - top
-    safety = min(width, height) * 0.06
+    safety = min(width, height) * 0.02
     if left < safety or top < safety or width - right < safety or height - bottom < safety:
-        issues.append("character needs at least 6% clear margin on every side")
+        issues.append("part needs about 2% transparent margin on every side")
+    width_ratio = bounds_width / width
     height_ratio = bounds_height / height
-    if not 0.65 <= height_ratio <= 0.9:
-        issues.append("character height should occupy about 65-90% of the canvas")
-
-    split = round(top + bounds_height * 0.4)
-    upper_count = sum(1 for x, y in opaque if left <= x < right and top <= y < split)
-    lower_count = sum(1 for x, y in opaque if left <= x < right and split <= y < bottom)
-    total = upper_count + lower_count
-    if total and upper_count / total < 0.15:
-        issues.append("upper/head region contains too little visible content")
-    if total and lower_count / total < 0.35:
-        issues.append("lower/body region contains too little visible content")
+    if part == "head" and (width_ratio < 0.55 or height_ratio < 0.55):
+        issues.append("head should fill at least 55% of both canvas dimensions")
+    elif part == "body" and (width_ratio < 0.35 or height_ratio < 0.65):
+        issues.append("body should fill at least 35% of width and 65% of height")
+    elif (part.startswith("arm-") or part.startswith("leg-")) and (width_ratio < 0.18 or height_ratio < 0.60):
+        issues.append("limb should fill at least 18% of width and 60% of height")
+    elif part.startswith("ear-") and (width_ratio < 0.30 or height_ratio < 0.50):
+        issues.append("ear should fill at least 30% of width and 50% of height")
     corner_indexes = [0, width - 1, (height - 1) * width, height * width - 1]
     if any(alpha[index] > 4 for index in corner_indexes):
         issues.append("canvas corners must be transparent")
@@ -118,17 +128,19 @@ def validate(path: Path) -> dict[str, object]:
         "ok": not issues,
         "issues": issues,
         "canvas": [width, height],
+        "part": part,
         "opaqueBounds": [left, top, right, bottom],
-        "splitY": split,
-        "upperOpaqueRatio": round(upper_count / total, 4) if total else 0,
+        "widthRatio": round(width_ratio, 4),
+        "heightRatio": round(height_ratio, 4),
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("image", type=Path)
+    parser.add_argument("--part", required=True, choices=sorted(PARTS))
     args = parser.parse_args()
-    result = validate(args.image)
+    result = validate(args.image, args.part)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["ok"] else 1
 

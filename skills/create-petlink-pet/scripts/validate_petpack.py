@@ -8,7 +8,19 @@ import json
 import sys
 from pathlib import Path
 
-REQUIRED_BONES = {"root", "body", "head"}
+REQUIRED_BONES = {
+    "root",
+    "body",
+    "head",
+    "ear-left",
+    "ear-right",
+    "arm-left",
+    "arm-right",
+    "leg-left",
+    "leg-right",
+}
+REQUIRED_SLOTS = {"body", "head", "arm-left", "arm-right", "leg-left", "leg-right"}
+OPTIONAL_SLOTS = {"ear-left", "ear-right"}
 REQUIRED_ACTIONS = {"idle", "move", "interact", "sleep"}
 
 
@@ -20,12 +32,17 @@ def validate(data: dict) -> list[str]:
     slots = data.get("slots") if isinstance(data.get("slots"), list) else []
     animations = data.get("animations") if isinstance(data.get("animations"), dict) else {}
     bone_ids = {bone.get("id") for bone in bones if isinstance(bone, dict)}
-    if not 3 <= len(bones) <= 7:
-        issues.append("bones must contain 3-7 entries")
-    if not REQUIRED_BONES.issubset(bone_ids):
-        issues.append("root, body, and head bones are required")
-    if not 2 <= len(slots) <= 7:
-        issues.append("slots must contain 2-7 entries")
+    if bone_ids != REQUIRED_BONES or len(bones) != len(REQUIRED_BONES):
+        issues.append("standard rig must contain exactly the nine PetLink bones")
+    if not 6 <= len(slots) <= 8:
+        issues.append("standard rig must contain 6-8 slots")
+    slot_ids = {slot.get("id") for slot in slots if isinstance(slot, dict)}
+    if not REQUIRED_SLOTS.issubset(slot_ids):
+        issues.append("head, body, both arms, and both legs require slots")
+    if len(OPTIONAL_SLOTS.intersection(slot_ids)) == 1:
+        issues.append("ear slots must be enabled or omitted as a pair")
+    if slot_ids - REQUIRED_SLOTS - OPTIONAL_SLOTS:
+        issues.append("standard rig contains an unknown slot")
     for slot in slots:
         if not isinstance(slot, dict) or not str(slot.get("dataUrl", "")).startswith("data:image/"):
             issues.append("every slot must contain an embedded image dataUrl")
@@ -61,6 +78,8 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as error:
         print(json.dumps({"ok": False, "issues": [str(error)]}, ensure_ascii=False, indent=2))
         return 1
+    if isinstance(data, dict) and isinstance(data.get("pet"), dict):
+        data = data["pet"]
     issues = validate(data)
     print(json.dumps({"ok": not issues, "issues": issues}, ensure_ascii=False, indent=2))
     return 0 if not issues else 1

@@ -13,6 +13,7 @@ export type PetWindowMessage =
   | { type: "drag-move"; petId: string; position: { x: number; y: number } }
   | { type: "drag-end"; petId: string; position: { x: number; y: number } }
   | { type: "interact"; petId: string }
+  | { type: "move-to"; position: { x: number; y: number } }
   | { type: "set-action"; action: "idle" | "move" | "interact" | "sleep" }
   | { type: "open-settings"; petId: string }
   | { type: "native-error"; message: string };
@@ -55,6 +56,7 @@ export async function syncNativePets(
   room: RoomSnapshot,
   packages: Record<string, PetPackage>,
   selfUserId: string,
+  randomBehavior: boolean,
 ) {
   if (!isTauri()) return;
   const { invoke } = await import("@tauri-apps/api/core");
@@ -80,6 +82,7 @@ export async function syncNativePets(
       packageRevision: petPackage.createdAt,
       layers,
       animations: petPackage.animations,
+      randomBehavior: randomBehavior && pet.ownerUserId === selfUserId,
     });
   }
 }

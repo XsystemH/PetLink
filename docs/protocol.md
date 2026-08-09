@@ -71,8 +71,8 @@ PONG
 
 ## 拖拽
 
-拖拽开始时服务器发放三秒软锁。每次 `DRAG_MOVE` 延长锁。主人始终可以拖拽自己的桌宠；好友需要桌宠主人开启 `allowFriendDrag`。
+拖拽开始时服务器发放三秒软锁。每次 `DRAG_MOVE` 延长锁，`DRAG_END` 携带并原子提交最终坐标，避免松手后被旧快照拉回。主人始终可以拖拽自己的桌宠；好友需要桌宠主人开启 `allowFriendDrag`。
 
 ## PetPackage v1
 
-包包含 3–7 根骨骼、2–7 个嵌入图片图层和恰好四个素材动作：`idle`、`move`、`interact`、`sleep`。`dragged` 和 `visiting` 是引擎状态，不要求素材动作。
+协议允许 3–10 根骨骼和 2–10 个嵌入图片图层。当前客户端生成器固定输出九根骨骼：`root`、`head`、`body`、`ear-left/right`、`arm-left/right`、`leg-left/right`；耳朵可以没有图层，但骨骼仍保留。包含恰好四个素材动作：`idle`、`move`、`interact`、`sleep`。`dragged` 和 `visiting` 是引擎状态，不要求素材动作。

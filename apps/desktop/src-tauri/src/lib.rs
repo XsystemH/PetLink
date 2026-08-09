@@ -177,6 +177,7 @@ fn upsert_pet_window(
     package_revision: i64,
     layers: Value,
     animations: Value,
+    random_behavior: bool,
 ) -> Result<(), String> {
     if !safe_pet_id(&pet_id) {
         return Err("invalid pet id".to_string());
@@ -226,7 +227,8 @@ fn upsert_pet_window(
             "isOwner": owner_user_id == self_user_id,
             "packageRevision": package_revision,
             "layers": layers,
-            "animations": animations
+            "animations": animations,
+            "randomBehavior": random_behavior
         }),
         true,
     )

@@ -20,6 +20,7 @@ namespace PetLink.NativeHost
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 64 * 1024 * 1024 };
         private static readonly Dictionary<string, PetWindow> Pets = new Dictionary<string, PetWindow>();
         private static readonly object OutputLock = new object();
+        internal static readonly Random BehaviorRandom = new Random();
         private static Application App;
 
         [DllImport("user32.dll")]
@@ -83,7 +84,8 @@ namespace PetLink.NativeHost
                     ValueReader.Number(command, "scale", 1.0),
                     ValueReader.Text(command, "action", "idle"),
                     ValueReader.Text(command, "direction", "right"),
-                    ValueReader.Bool(command, "isOwner", false));
+                    ValueReader.Bool(command, "isOwner", false),
+                    ValueReader.Bool(command, "randomBehavior", false));
                 pet.ShowPet();
             }
             else if (type == "hide-others")
@@ -191,11 +193,14 @@ namespace PetLink.NativeHost
         private readonly DispatcherTimer animationTimer;
         private bool dragging;
         private bool isOwner;
+        private bool randomBehavior;
+        private bool hasRunRandomBehavior;
         private bool awaitingDragAck;
         private string action = "idle";
         private DateTime actionStarted = DateTime.UtcNow;
         private DateTime lastDragPositionEmit = DateTime.MinValue;
         private DateTime suppressRemotePositionUntil = DateTime.MinValue;
+        private DateTime nextRandomBehaviorAt = DateTime.UtcNow.AddSeconds(4.5);
         private double targetLeft;
         private double targetTop;
         private double pendingDragLeft;
@@ -250,9 +255,16 @@ namespace PetLink.NativeHost
             double scale,
             string nextAction,
             string direction,
-            bool owner)
+            bool owner,
+            bool nextRandomBehavior)
         {
             isOwner = owner;
+            if (randomBehavior != nextRandomBehavior)
+            {
+                randomBehavior = nextRandomBehavior;
+                hasRunRandomBehavior = false;
+                nextRandomBehaviorAt = DateTime.UtcNow.AddSeconds(2);
+            }
             if (packageRevision != nextPackageRevision)
             {
                 LoadLayers(rawLayers);
@@ -304,6 +316,7 @@ namespace PetLink.NativeHost
             {
                 action = nextAction;
                 actionStarted = DateTime.UtcNow;
+                if (action == "sleep") nextRandomBehaviorAt = actionStarted.AddSeconds(10);
             }
             directionTransform.ScaleX = direction == "left" ? -1 : 1;
         }
@@ -436,6 +449,7 @@ namespace PetLink.NativeHost
 
         private void Animate(object sender, EventArgs args)
         {
+            RunRandomBehavior();
             var moving = false;
             if (!dragging && action == "move")
             {
@@ -479,6 +493,45 @@ namespace PetLink.NativeHost
                     if (visuals.TryGetValue(track.Key, out visual)) visual.Transform.Apply(sampled, Width, Height);
                 }
             }
+        }
+
+        private void RunRandomBehavior()
+        {
+            var now = DateTime.UtcNow;
+            if (!isOwner || !randomBehavior || dragging || awaitingDragAck || now < nextRandomBehaviorAt) return;
+            nextRandomBehaviorAt = now.AddSeconds(4.5);
+            if (action == "sleep")
+            {
+                EmitAction("idle");
+                return;
+            }
+
+            if (!hasRunRandomBehavior)
+            {
+                hasRunRandomBehavior = true;
+                EmitRandomMove();
+                return;
+            }
+
+            var roll = Program.BehaviorRandom.NextDouble();
+            if (roll < 0.68) EmitRandomMove();
+            else if (roll < 0.82) EmitAction("idle");
+            else if (roll < 0.94) EmitAction("interact");
+            else EmitAction("sleep");
+        }
+
+        private void EmitRandomMove()
+        {
+            emit(new Dictionary<string, object>
+            {
+                { "type", "move-to" },
+                { "position", new Dictionary<string, object>
+                    {
+                        { "x", 0.08 + Program.BehaviorRandom.NextDouble() * 0.84 },
+                        { "y", 0.86 + Program.BehaviorRandom.NextDouble() * 0.07 }
+                    }
+                }
+            });
         }
 
         private void ApplyNeutralPose()

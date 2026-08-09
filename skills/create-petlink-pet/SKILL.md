@@ -1,53 +1,45 @@
 ---
 name: create-petlink-pet
-description: Create, edit, and validate personalized transparent source images for PetLink's lightweight layered desktop-pet generator. Use when a user asks to make a PetLink pet from a reference image or description, adapt a character for PetLink, improve a source image that failed PetLink generation, or inspect whether an image satisfies the PetLink 3-bone/4-action input contract.
+description: Create, edit, and validate separate transparent part images for PetLink's fixed nine-bone desktop-pet rig. Use when a user asks to make a PetLink pet from a description or reference, prepare head/body/limb/ear uploads, repair a part that crops poorly, choose a coherent solid-color set, or validate a PetLink PetPackage v1.
 ---
 
 # Create a PetLink pet
 
-Produce one clean transparent PNG that PetLink can split into `head` and `body`. Do not produce sprite sheets, animation frames, source code, or a complex rig unless the user explicitly asks for developer artifacts.
+Produce a coherent part set for PetLink's fixed rig. Do not make animation frames, sprite sheets, code, or a free-form skeleton.
 
 ## Workflow
 
 1. Read [references/source-image-rules.md](references/source-image-rules.md).
-2. Preserve the user's character identity, requested clothing, palette, expression, and art style.
-3. Convert unsuitable compositions into a full-body neutral pose with a readable silhouette.
-4. Generate or edit the image with the available image-generation tool.
-5. Save the result as a transparent PNG.
-6. Run `python scripts/validate_source.py <image.png>`.
-7. Inspect the image visually after validation. Numeric validation cannot detect a misplaced anatomical split or unwanted merged limbs.
-8. Iterate until validation passes and the image visibly follows the rules.
-9. Deliver the PNG and briefly state whether PetLink will use the standard three-bone rig or may need the optional limb layers.
+2. Confirm the character identity, palette, expression, clothing, and whether ears are needed from the request or references.
+3. Create six required square PNGs named `head`, `body`, `arm-left`, `arm-right`, `leg-left`, and `leg-right`. Create `ear-left` and `ear-right` only when the design needs ears.
+4. Keep one isolated part in each file. Preserve consistent scale, lighting, outline width, texture density, and left/right orientation across the set.
+5. Use the available image-generation or editing tool. Keep backgrounds transparent and important details centered because PetLink center-fills each upload into a fixed mask.
+6. Run `python scripts/validate_source.py <image.png> --part <part-id>` for every output.
+7. Inspect every PNG visually after validation, then inspect the complete set together for seams, mismatched colors, mirrored text, duplicated details, or inconsistent perspective.
+8. Iterate until the required six images pass and the optional ears, when present, also pass.
+9. Deliver the files with their exact PetLink part names and tell the user which upload card receives each file.
 
-## Prompt construction
+If the user prefers pure colors, deliver a mapping from the same part IDs to six-digit hex colors instead of images. Keep paired limbs and ears symmetrical unless asymmetry is intentional.
 
-Include these constraints in the generation/edit prompt:
+## Prompt constraints
 
-- one character only;
-- complete body, uncropped;
-- transparent background with no floor, shadow, text, border, or scenery;
-- centered character with 8–12% clear margin;
-- front or slight three-quarter view;
-- neutral standing or floating pose;
-- head visually separable from the body near 40% of the opaque character height;
-- arms, legs, ears, wings, or tail readable and not fused into an ambiguous silhouette;
-- consistent lighting and intact costume details;
-- no extra limbs or duplicated accessories.
+Include these constraints when generating or editing part images:
 
-Adapt locomotion cues to the character. Keep legs separated for walkers, a clear lower mass for hoppers, and a clean lower silhouette for floating characters.
+- exactly one isolated anatomical or costume part per image;
+- square transparent PNG, at least 512 x 512;
+- front-facing or slight three-quarter design consistent across every part;
+- defining details centered and large enough to survive center-cover cropping;
+- no scenery, floor, shadow, typography, watermark, UI, or neighboring body parts;
+- no extra limbs or duplicated accessories;
+- preserve deliberate left/right asymmetry without adding readable text that would break when the pet faces left.
 
-## Repairing failed inputs
+## Repairing failed parts
 
-When PetLink reports that it cannot split the image:
-
-- remove complex or nontransparent backgrounds;
-- restore missing feet, tail, ears, or lower body;
-- move props away from the neck split;
-- reduce extreme poses and foreshortening;
-- enlarge a small character without touching the canvas edge;
-- separate a head that visually merges into the torso.
-
-Do not merely erase a rectangular band at the split. Preserve a natural neck or attachment boundary.
+- Move clipped eyes, markings, or costume details toward the center.
+- Enlarge a small part while retaining a small transparent safety margin.
+- Remove attached neighboring anatomy; PetLink supplies the final overlap and joint placement.
+- Match hue, lighting, outline, and texture scale to the other files.
+- Regenerate an incorrect side instead of mirroring directional symbols or asymmetric accessories.
 
 ## Developer validation
 
@@ -57,4 +49,4 @@ When validating an internal `PetPackage` JSON, read [references/pet-package-v1.m
 python scripts/validate_petpack.py path/to/pet.json
 ```
 
-Do not introduce additional required animations or more than seven bones in format version 1.
+The standard generator keeps nine bones even when the two optional ear slots are disabled.
